@@ -240,7 +240,7 @@ class TestDiadicGates(unittest.TestCase):
       self.assertEqual(out, result, '%s expected %s' %  (gate, STATE_NAME[out]))
 
 
-class TestTrye(unittest.TestCase):
+class TestTryte(unittest.TestCase):
   def setupTryte(self):
     tryte = Tryte()
     writers = [ConnectionPoint(ConnectionPoint.WRITER) for i in range(9)]
@@ -296,6 +296,41 @@ class TestTrye(unittest.TestCase):
 
     for reader in readers:
       self.assertEqual(MINUS, reader.GetState(), 'Everything should still be (-)')
+
+
+class MockTimer:
+  nextfn = False
+  expected_period = False
+  def __init__(self, period, fn):
+    assert MockTimer.expected_period == period, \
+        'Periods are not equal, %f != %f' % (MockTimer.expected_period, period)
+    self.period = period
+    MockTimer.nextfn = fn
+  def start(self):
+    pass
+
+  def RunFunc():
+    if MockTimer.nextfn:
+      MockTimer.nextfn()
+    else:
+      MockTimer.nextfn = False
+
+class TestOscillator(unittest.TestCase):
+  def testBasicOscillations(self):
+    MockTimer.expected_period = 0.25
+    oscillator = Oscillator(1, MockTimer)
+    expected_values = [
+        NEUTRAL, PLUS,
+        NEUTRAL, MINUS,
+        NEUTRAL, PLUS,
+        NEUTRAL, MINUS, 
+        NEUTRAL,
+    ]
+
+    for i in range(8):
+      self.assertEqual(expected_values[i], oscillator.ReadOutput(), \
+          '%s at time %d expected %s' % (oscillator, i, STATE_NAME[expected_values[i]]))
+      MockTimer.RunFunc()
 
 
 if __name__ == '__main__':

@@ -150,6 +150,9 @@ class GateMonadic:
     else:
       self._output.SetStateWrite(state)
 
+  def ReadOutput(self):
+    return self._output.GetState()
+
   def Update(self):
     raise NotImplementedError('Update not implemented for %s' % type(self).__name__)
 
@@ -283,6 +286,9 @@ class GateDiadic:
       Timer(self._delay, lambda: self._output.SetStateWrite(state))
     else:
       self._output.SetStateWrite(state)
+
+  def ReadOutput(self):
+    return self._output.GetState()
 
   def Update(self):
     raise NotImplementedError('Update not implemented for %s' % type(self).__name__)
@@ -557,7 +563,7 @@ class GateMem(GateDiadic):
     else:
       self.SetOutputState(GateNegate.LOGIC_MAP[read1])
 
-class Tryte():
+class Tryte:
   def __init__(self):
     self._mems = [GateMem() for i in range(9)]
     self._read = GateIdentity()
@@ -575,7 +581,7 @@ class Tryte():
       raise ConnectionError('Index not in range [0,8]: %d' % idx)
 
   def SetInputWires(self, wires):
-    if len(wires) is not len(self._mems):
+    if len(wires) > len(self._mems):
       raise ConnectionError('Cannot attach %d wires to %d memory inputs' % (len(wires), len(self._mems)))
     for (wire, mem) in zip(wires, self._mems):
       mem.SetInputWire1(wire)
@@ -588,7 +594,7 @@ class Tryte():
       raise ConnectionError('Index not in range [0,8]: %d' % idx)
 
   def SetOutputWires(self, wires):
-    if len(wires) is not len(self._mems):
+    if len(wires) > len(self._mems):
       raise ConnectionError('Cannot attach %d wires to %d memory inputs' % (len(wires), len(self._mems)))
     for (wire, mem) in zip(wires, self._mems):
       mem.SetOutputWire(wire)
@@ -596,6 +602,43 @@ class Tryte():
   def SetReadWire(self, wire):
     self._read.SetInputWire(wire)
 
+  def __str__(self):
+    return '%s<%s>' % (type(self).__name__, ','.join([STATE_NAME[mem.ReadOutput()] for mem in self._mems]))
+
+class Oscillator:
+  """
+  A clock that oscillates between (-), (0), and (+) such that every other tick
+  is (0), and the reamining values swap between (-) and (+)
+
+  Ex. (0), (+), (0), (-), (0), (+), (0), (-), (0), ...
+
+  Default frequency is 19683 (3 ** 9)Hz.
+  """
+  PATTERN = [NEUTRAL, PLUS, NEUTRAL, MINUS]
+
+  def __init__(self, frequency=3**9, timer=Timer, debug=False):
+    self._period = 1 / frequency / len(Oscillator.PATTERN)
+    self._output = ConnectionPoint(ConnectionPoint.WRITER)
+    self._idx = 0
+    self._debug = debug
+    self._timer_class = timer
+    self.Update()
+
+  def Update(self):
+    self._timer_class(self._period, self.Update).start()
+    self._output.SetStateWrite(Oscillator.PATTERN[self._idx])
+    self._idx = (self._idx + 1) % len(Oscillator.PATTERN)
+    if (self._debug):
+      print(STATE_NAME[self._output.GetState()])
+
+  def SetOutputWire(self, wire):
+    wire.Connect(self._output)
+
+  def ReadOutput(self):
+    return self._output.GetState()
+
+  def __str__(self):
+    return '%s<period: %d, state: %s>' % (type(self).__name__, self._period, STATE_NAME[self.ReadOutput()])
 
 if __name__ == '__main__':
   print('Done loading gates!')
